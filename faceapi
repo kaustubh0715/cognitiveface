@@ -1,0 +1,128 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using Microsoft.ProjectOxford.Face;
+using Microsoft.ProjectOxford.Face.Contract;
+
+namespace ConsoleApp2
+{
+    class Program
+    {
+
+        static FaceServiceClient faceClient = new FaceServiceClient("key"," https://centralindia.api.cognitive.microsoft.com/face/v1.0");
+
+        public static async void CreatePersonGroup(string personGroupId, string personGroupName)
+        {
+            try
+            {
+                await faceClient.CreatePersonGroupAsync(personGroupId, personGroupName);
+                Console.WriteLine("Create Person Group succeed");
+
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[ERROR]" + ex.Message);
+
+            }
+
+
+
+        }
+
+
+        public static async void AddPersonToGroup(string personGroupId, string personName, string imgPath)
+        {
+            try
+            {
+                await faceClient.GetPersonGroupAsync(personGroupId);
+                CreatePersonResult personResult = await faceClient.CreatePersonAsync(personGroupId, personName);
+                DetectFaceAndRegister(personGroupId, personResult, imgPath);
+               
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[ERROR]" + ex.Message);
+            }
+        }
+        private static async void DetectFaceAndRegister(string personGroupId, CreatePersonResult personResult, string imgPath)
+        {
+            foreach (var image in Directory.GetFiles(imgPath, "*.*"))  
+            {
+                using (Stream s = File.OpenRead(image))
+                {
+                    await faceClient.AddPersonFaceAsync(personGroupId, personResult.PersonId, s);
+
+                }
+                Console.WriteLine(" Person Added to Group succeed");
+
+            }
+
+
+        }
+
+        private static async void TrainingAI(string personGroupId)
+        {
+            await faceClient.TrainPersonGroupAsync(personGroupId);
+           // TrainingStatus training = null;
+            //TrainingStatus training = null;
+            TrainingStatus trainingStatus = null;
+            while (true)
+            {
+                trainingStatus = await faceClient.GetPersonGroupTrainingStatusAsync(personGroupId);
+
+                if (trainingStatus.Status != Status.Running)
+                {
+                    Console.WriteLine("Status" + trainingStatus.Status);
+                    break;
+                }
+                Console.WriteLine("Waiting for training AI.....");
+                await Task.Delay(1000);
+            }
+            Console.WriteLine("Training AI Completed");
+           
+        }
+
+        private static async void IdentifyFace(string personGroupId, string imgPath)
+        {
+            using (Stream s = File.OpenRead(imgPath))
+            {
+                var faces = await faceClient.DetectAsync(s);
+                var faceIds = faces.Select(face => face.FaceId).ToArray();
+
+                try {
+                    var result = await faceClient.IdentifyAsync(personGroupId, faceIds);
+                    foreach (var identifyResult in result)
+                    {
+                        Console.WriteLine($"Result of face:{identifyResult.FaceId}");
+                        if (identifyResult.Candidates.Length == 0)
+                            Console.WriteLine("No one Identified");
+                        else
+                        {
+                            var candidateId = identifyResult.Candidates[0].PersonId;
+                            var person = await faceClient.GetPersonAsync(personGroupId, candidateId);
+                            Console.WriteLine($"Identified as {person.Name}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("[ERROR]" + ex.Message);
+                }
+            }
+        }
+        static void Main(string[] args)
+        {
+           // CreatePersonGroup("kyc","Trust");
+            // AddPersonToGroup("bankers", "sachin", @"E:\sachin");
+
+            //TrainingAI("bankers");
+             IdentifyFace("kyc", @"C:\Users\Kaustubh\Documents\Visual Studio 2015\Projects\Atm\Atm\Captures\SavedPhoto.png");
+
+            Console.ReadKey();
+        }
+    }
+}
